@@ -1,0 +1,29 @@
+#! /usr/bin/env node
+
+var fs = require('fs');
+var program = require('commander');
+var path = process.cwd();
+
+var pkg = require('../package.json');
+
+program.version(pkg.version)
+    .usage('[options]')
+    .parse(process.argv);
+
+if (!program.args.length) {
+    program.help();
+}
+else {
+    console.log('keywords ' + program.args);
+    // 输出项目目录
+    fs.readdir(path, function (err, files) {
+        if (err) {
+            return console.log(err);
+        }
+        else {
+            for (var i = 0, len = files.length; i < len; i++) {
+                console.log(files[i]);
+            }
+        }
+    });
+}
