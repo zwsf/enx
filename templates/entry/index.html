@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>首页</title>
+    <link rel="stylesheet" href="/asset/index.css" media="all">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.19/require.js"></script>
+    <script src="/asset/common.js"></script>
+</head>
+<body>
+    <div id="app"></div>
+    <script type="text/javascript">
+        require.config({
+            'baseUrl': '/asset',
+            'paths': {},
+            'packages': []
+        });
+
+        require(['index'], function (init) {
+            init();
+        });
+    </script>
+    <script src="http://localhost:3000/webpack-dev-server.js"></script>
+</body>
+</html>

@@ -1,29 +1,320 @@
 #! /usr/bin/env node
 
 var fs = require('fs');
-var program = require('commander');
-var path = process.cwd();
+var path = require('path');
+var cp = require('child_process');
+var mkdirp = require('mkdirp');
+var readline = require('readline');
 
 var pkg = require('../package.json');
+var exit = process.exit;
 
-program.version(pkg.version)
-    .usage('[options]')
-    .parse(process.argv);
+var args = process.argv.slice(2);
 
-if (!program.args.length) {
-    program.help();
+// TODO 如何更巧妙的区分不同的命令执行相应的代码
+switch (args[0]) {
+    case 'init':
+        init();
+        break;
+    case 'start':
+        start();
+        break;
+    case 'build':
+        build();
+        break;
+    case 'help':
+    default:
+        // TODO 加上输出字体颜色
+        console.log('enx init appName 初始化项目');
+        console.log('enx start 启动webserver');
+        console.log('enx build 静态资源打包');
+        break;
 }
-else {
-    console.log('keywords ' + program.args);
-    // 输出项目目录
-    fs.readdir(path, function (err, files) {
+
+/**
+ * 启动webserver
+ *
+ */
+function start() {
+    cp.exec('webpack-dev-server --config enx-webserver-config.js', function (err, stdout, stderr) {
         if (err) {
-            return console.log(err);
+            console.log(err);
+        }
+
+        console.log(stdout);
+        console.log(stderr);
+    });
+}
+
+/**
+ * 构建项目最终产出
+ *
+ */
+function build() {
+    console.log('start building ...');
+
+    /**
+     *
+     * lib下的createTPL.js 在enx包中
+     * enx-build-config.js 在实际产出的项目中
+     * 但是createTPL.js又调用了enx-build-config.js 比较混乱
+     * 解决方案:
+     * 将createTPL整合到enx-build-config.js中
+     * 执行项目中的enx-build-config.js文件
+     */
+    cp.exec('rm -rf asset tpl '
+        + '&& webpack --config '
+        + path.join(process.cwd(), 'enx-build-config.js')
+        + ' -p && rm -rf tpl',
+        function (err, stdout, stderr) {
+        if (err) {
+            console.log(err);
+        }
+
+        console.log(stdout);
+        console.log(stderr);
+
+        console.log();
+
+        console.log('finish building ...');
+    });
+
+}
+
+/**
+ * 初始化项目
+ *
+ */
+function init() {
+    var destinationPath = args[1] || '.';
+    var appName = path.basename(path.resolve(destinationPath));
+    emptyDirectory(destinationPath, function (empty) {
+        if (empty) {
+            createApplication(destinationPath, appName);
         }
         else {
-            for (var i = 0, len = files.length; i < len; i++) {
-                console.log(files[i]);
-            }
+            confirm('destination is not empty, continue? [Y/N] ', function (ok) {
+                if (ok) {
+                    process.stdin.destroy();
+                    createApplication(destinationPath, appName);
+                } else {
+                    console.error('aborting');
+                    exit(1);
+                }
+            });
         }
     });
+}
+
+/**
+ * 根据stdin确定stdout
+ *
+ */
+function confirm(msg, cb) {
+    var rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+    });
+
+    rl.question(msg, function (input) {
+        rl.close();
+        cb(/^y|yes|ok|true$/i.test(input));
+    });
+}
+
+/**
+ * 创建项目
+ *
+ */
+function createApplication(path, appName) {
+
+    // 根据templates复制/创建到对应的目录
+
+    var wait = 11;
+
+    /**
+     * 计数器标示创建应用是否完成
+     * 来自express-generator
+     *
+     */
+    function complete() {
+        if (--wait) return;
+        var prompt = launchedFromCmd() ? '>' : '$';
+
+        console.log();
+        console.log('   install dependencies:');
+        console.log('     %s cd %s && npm install', prompt, path);
+        console.log();
+        console.log('   run the app:');
+
+        if (launchedFromCmd()) {
+          console.log('     %s SET DEBUG=%s:* & npm start', prompt, appName);
+        } else {
+          console.log('     %s DEBUG=%s:* npm start', prompt, appName);
+        }
+
+        console.log();
+    }
+
+    mkdir(path, function () {
+
+        // 复制webserver build配置文件
+        copy_template('enx-webserver-config.js', path + '/enx-webserver-config.js');
+        copy_template('enx-build-config.js', path + '/enx-build-config.js');
+
+        // 创建entry下的文件
+        mkdir(path + '/entry', function () {
+            copy_template('entry/index.html', path + '/entry/index.html');
+            copy_template('entry/search.html', path + '/entry/search.html');
+
+            complete();
+        });
+
+        // 创建src下的文件
+        mkdir(path + '/src/actions', function () {
+            complete();
+        });
+        mkdir(path + '/src/components', function () {
+            complete();
+        });
+        mkdir(path + '/src/constants', function () {
+            complete();
+        });
+
+        mkdir(path + '/src/index', function () {
+            copy_template('src/index/index.styl', path + '/src/index/index.styl');
+            copy_template('src/index/main.js', path + '/src/index/main.js');
+
+            complete();
+        });
+        mkdir(path + '/src/reducers', function () {
+            complete();
+        });
+        mkdir(path + '/src/routes', function () {
+            complete();
+        });
+
+        mkdir(path + '/src/search', function () {
+            copy_template('src/search/index.styl', path + '/src/search/index.styl');
+            copy_template('src/search/main.js', path + '/src/search/main.js');
+
+            complete();
+        });
+
+        mkdir(path + '/src/store', function () {
+            complete();
+        });
+
+        mkdir(path + '/src/containers', function () {
+            complete();
+        });
+
+        // package.json
+        var pkg = {
+            "name": appName,
+            "version": "0.0.0",
+            "private": true,
+            "description": "",
+            "repository": "",
+            "scripts": {
+              "start": "enx start",
+              "build": "enx build"
+            },
+            "keywords": [
+              "react",
+              "app",
+              "redux"
+            ],
+            "author": "",
+            "license": "ISC",
+            "dependencies": {
+              "history": "^1.13.1",
+              "react": "^0.14.3",
+              "react-dom": "^0.14.3",
+              "react-redux": "^4.0.1",
+              "react-router": "^1.0.2",
+              "redux": "^3.0.5"
+            },
+            "devDependencies": {
+              "babel": "^5.8.34",
+              "babel-core": "^5.6.20",
+              "babel-loader": "^5.4.0",
+              "babel-runtime": "^5.8.20",
+              "css-loader": "^0.23.0",
+              "extract-text-webpack-plugin": "^0.9.1",
+              "file-loader": "^0.8.5",
+              "html-webpack-plugin": "^1.7.0",
+              "postcss-loader": "^0.8.0",
+              "react-hot-loader": "^1.3.0",
+              "style-loader": "^0.13.0",
+              "stylus-loader": "^1.4.2",
+              "url-loader": "^0.5.7",
+              "webpack": "^1.12.9",
+              "webpack-dev-server": "^1.14.0"
+            }
+        }
+
+        write(path + '/package.json', JSON.stringify(pkg, null, 2));
+
+        complete();
+    });
+}
+
+/**
+ * 检查指定目录是否为空
+ *
+ */
+function emptyDirectory(path, fn) {
+    fs.readdir(path, function(err, files){
+        if (err && 'ENOENT' != err.code) throw err;
+        fn(!files || !files.length);
+    });
+}
+
+/**
+ * 创建目录
+ *
+ */
+function mkdir(path, fn) {
+    mkdirp(path, 0755, function(err){
+        if (err) throw err;
+        console.log('   \033[36mcreate\033[0m : ' + path);
+        fn && fn();
+    });
+}
+
+/**
+ * Determine if launched from cmd.exe
+ */
+
+function launchedFromCmd() {
+  return process.platform === 'win32'
+    && process.env._ === undefined;
+}
+
+/**
+ * 写入文件
+ *
+ */
+function write(path, str, mode) {
+    // 如果目录不存在或文件不存在就创建
+    fs.writeFileSync(path, str, { mode: mode || 0666 });
+    console.log('   \x1b[36mcreate\x1b[0m : ' + path);
+}
+
+/**
+ * 载入模板
+ *
+ */
+function loadTemplate(name) {
+    return fs.readFileSync(path.join(__dirname, '..', 'templates', name), 'utf-8');
+}
+
+/**
+ * 拷贝文件
+ *
+ */
+function copy_template(from, to) {
+    from = path.join(__dirname, '..', 'templates', from);
+    write(to, fs.readFileSync(from, 'utf-8'));
 }
