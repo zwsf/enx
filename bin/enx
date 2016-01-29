@@ -24,10 +24,9 @@ switch (args[0]) {
         break;
     case 'help':
     default:
-        // TODO 加上输出字体颜色
-        console.log('enx init appName 初始化项目');
-        console.log('enx start 启动webserver');
-        console.log('enx build 静态资源打包');
+        console.log('   \033[32menx init appName\033[0m  ' + '  初始化项目');
+        console.log('   \033[32menx start\033[0m ' + '          启动webserver');
+        console.log('   \033[32menx build\033[0m ' + '          静态资源打包');
         break;
 }
 
